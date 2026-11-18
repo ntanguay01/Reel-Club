@@ -82,17 +82,12 @@ Interactive docs for the built endpoints are at `http://127.0.0.1:8000/docs` onc
    ```
    pip install -r requirements.txt
    ```
-2. Create a bot at https://discord.com/developers/applications, copy its token, and invite it to your server with the `bot` and `applications.commands` scopes.
-3. Get a free TMDB API key (v3) at https://www.themoviedb.org/settings/api.
-4. Copy `.env.example` to `.env` and fill it in. Never commit `.env`.
-5. Run the API, then the bot, in two terminals from this folder:
+2. Run the API, then the bot, in two terminals from this folder:
    ```
    uvicorn api.main:app --reload
    python -m bot.main
    ```
-
-Set `DISCORD_GUILD_ID` in `.env` while developing so slash commands show up instantly.
-
+   
 ## Project layout
 
 ```
