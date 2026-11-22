@@ -2,13 +2,14 @@
 import os
 import sqlite3
 from contextlib import asynccontextmanager
+from decimal import ROUND_HALF_UP, Decimal
 
 from dotenv import load_dotenv
 
 load_dotenv()  # must run before the imports below read environment variables
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
-from pydantic import BaseModel, Field  # noqa: E402
+from pydantic import BaseModel, Field, field_validator  # noqa: E402
 
 from . import tmdb  # noqa: E402
 from .database import get_db, init_db  # noqa: E402
@@ -30,19 +31,38 @@ app = FastAPI(title="ReelClub API", lifespan=lifespan, dependencies=[Depends(req
 
 
 # ----------------------------------------------------------------- models
+def round_half_up(value: float) -> float:
+    """Round to one decimal the way people expect: 8.25 becomes 8.3.
+    (Python's built-in round() sends exact halves to the even digit, so 8.25 would become 8.2.)"""
+    return float(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+
+
+def one_decimal(value: float | None) -> float | None:
+    """Scores may have at most one decimal place (7.5 is fine, 7.55 is not)."""
+    if value is None:
+        return None
+    if abs(value * 10 - round(value * 10)) > 1e-6:
+        raise ValueError("Score can have at most one decimal place, like 7.5.")
+    return round(value, 1)
+
+
 class RatingCreate(BaseModel):
     guild_id: str
     discord_id: str
     username: str
     tmdb_id: int
-    score: int = Field(ge=1, le=10)
+    score: float = Field(ge=1, le=10)
     review: str | None = Field(default=None, max_length=1000)
+
+    _check_score = field_validator("score")(one_decimal)
 
 
 class RatingUpdate(BaseModel):
     discord_id: str  # must match the rating's owner
-    score: int | None = Field(default=None, ge=1, le=10)
+    score: float | None = Field(default=None, ge=1, le=10)
     review: str | None = Field(default=None, max_length=1000)
+
+    _check_score = field_validator("score")(one_decimal)
 
 
 # ---------------------------------------------------------------- helpers
@@ -120,7 +140,7 @@ async def get_title(
             (tmdb_id, guild_id),
         ).fetchone()
         movie["club_rating"] = {
-            "average": round(row["average"], 1) if row["average"] is not None else None,
+            "average": round_half_up(row["average"]) if row["average"] is not None else None,
             "count": row["n"],
         }
     return movie

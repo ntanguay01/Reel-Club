@@ -19,7 +19,7 @@ The bot never touches the database. Every read and write goes through the API.
 | Command | What it does | CRUD |
 |---|---|---|
 | `/info title` | Poster, synopsis, runtime, director, cast, genres, streaming services, club rating | Read |
-| `/rate title score [review]` | Rate a movie 1 to 10 with an optional review | Create |
+| `/rate title score [review]` | Rate a movie 1 to 10 (one decimal allowed, like 7.5) with an optional review | Create |
 | `/ratings title` | Everyone's ratings and the club average for a movie | Read |
 | `/myratings` | Movies you have rated in this server | Read |
 | `/editrating title [score] [review]` | Change your score or review | Update |
@@ -87,7 +87,9 @@ Interactive docs for the built endpoints are at `http://127.0.0.1:8000/docs` onc
    uvicorn api.main:app --reload
    python -m bot.main
    ```
-   
+
+Set `DISCORD_GUILD_ID` in `.env` while developing so slash commands show up instantly.
+
 ## Project layout
 
 ```

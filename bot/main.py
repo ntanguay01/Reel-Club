@@ -27,6 +27,9 @@ class ReelClubBot(discord.Client):
             guild = discord.Object(id=int(guild_id))
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
+            # remove the old global copies so commands don't show up twice
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
         else:  # global sync (can take up to an hour to appear)
             await self.tree.sync()
 
@@ -71,6 +74,19 @@ def label(r: dict) -> str:
     return f"{r['title']}{year}"
 
 
+def fmt_score(score: float) -> str:
+    return f"{score:.1f}"
+
+
+def check_score(score: Optional[float]) -> Optional[float]:
+    """Scores may have at most one decimal place, like 7.5."""
+    if score is None:
+        return None
+    if abs(score * 10 - round(score * 10)) > 1e-6:
+        raise APIError(400, "Scores can have at most one decimal place, like 7.5.")
+    return round(score, 1)
+
+
 def fmt_runtime(minutes: int) -> str:
     return f"{minutes // 60}h {minutes % 60}m"
 
@@ -78,7 +94,7 @@ def fmt_runtime(minutes: int) -> str:
 def rating_embed(r: dict, heading: str) -> discord.Embed:
     embed = discord.Embed(
         title=f"{heading}: {label(r)}",
-        description=f"**{r['score']}/10**" + (f"\n{r['review']}" if r.get("review") else ""),
+        description=f"**{fmt_score(r['score'])}/10**" + (f"\n{r['review']}" if r.get("review") else ""),
         color=discord.Color.gold(),
     )
     embed.set_footer(text=r["username"])
@@ -115,7 +131,7 @@ async def info(interaction: discord.Interaction, title: str):
         embed.add_field(name="TMDB score", value=f"{m['tmdb_score']}/10")
     club = m.get("club_rating") or {}
     if club.get("count"):
-        embed.add_field(name="Club rating", value=f"{club['average']}/10 ({club['count']} ratings)")
+        embed.add_field(name="Club rating", value=f"{fmt_score(club['average'])}/10 ({club['count']} ratings)")
     else:
         embed.add_field(name="Club rating", value="No ratings yet")
     where = ", ".join(m["streaming"]) if m.get("streaming") else "Not available to stream"
@@ -125,16 +141,17 @@ async def info(interaction: discord.Interaction, title: str):
 
 
 @bot.tree.command(name="rate", description="Rate a movie from 1 to 10, with an optional review")
-@app_commands.describe(title="Start typing a movie title", score="Your score, 1 to 10", review="Optional review")
+@app_commands.describe(title="Start typing a movie title", score="Your score from 1 to 10, one decimal allowed (like 7.5)", review="Optional review")
 @app_commands.autocomplete(title=title_autocomplete)
 @app_commands.guild_only()
 async def rate(
     interaction: discord.Interaction,
     title: str,
-    score: app_commands.Range[int, 1, 10],
+    score: app_commands.Range[float, 1.0, 10.0],
     review: Optional[app_commands.Range[str, 1, 1000]] = None,
 ):
     await interaction.response.defer()
+    score = check_score(score)
     tmdb_id = await resolve_title(title)
     rating = await bot.api.create_rating(
         guild_id=str(interaction.guild_id),
@@ -163,9 +180,9 @@ async def ratings(interaction: discord.Interaction, title: str):
         embed.description = "No ratings yet. Be the first with `/rate`."
     else:
         club = movie["club_rating"]
-        lines = [f"**Average: {club['average']}/10** from {club['count']} rating(s)\n"]
+        lines = [f"**Average: {fmt_score(club['average'])}/10** from {club['count']} rating(s)\n"]
         for r in rows:
-            line = f"**{r['username']}**: {r['score']}/10"
+            line = f"**{r['username']}**: {fmt_score(r['score'])}/10"
             if r.get("review"):
                 review = r["review"]
                 line += f"\n> {review[:150]}{'...' if len(review) > 150 else ''}"
@@ -187,7 +204,7 @@ async def myratings(interaction: discord.Interaction):
         title=f"{interaction.user.display_name}'s ratings", color=discord.Color.gold()
     )
     embed.description = (
-        "\n".join(f"**{label(r)}**: {r['score']}/10" for r in rows)
+        "\n".join(f"**{label(r)}**: {fmt_score(r['score'])}/10" for r in rows)
         if rows
         else "You haven't rated anything yet. Try `/rate`."
     )
@@ -195,16 +212,17 @@ async def myratings(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="editrating", description="Change your score or review for a movie")
-@app_commands.describe(title="Start typing a movie title", score="New score, 1 to 10", review="New review")
+@app_commands.describe(title="Start typing a movie title", score="New score from 1 to 10, one decimal allowed", review="New review")
 @app_commands.autocomplete(title=title_autocomplete)
 @app_commands.guild_only()
 async def editrating(
     interaction: discord.Interaction,
     title: str,
-    score: Optional[app_commands.Range[int, 1, 10]] = None,
+    score: Optional[app_commands.Range[float, 1.0, 10.0]] = None,
     review: Optional[app_commands.Range[str, 1, 1000]] = None,
 ):
     await interaction.response.defer()
+    score = check_score(score)
     if score is None and review is None:
         raise APIError(400, "Give a new score, a new review, or both.")
     mine = await find_my_rating(interaction, title)

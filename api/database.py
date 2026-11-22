@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS ratings (
     guild_id    TEXT NOT NULL,
     member_id   INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
     title_id    INTEGER NOT NULL REFERENCES titles(id)  ON DELETE CASCADE,
-    score       INTEGER NOT NULL CHECK (score BETWEEN 1 AND 10),
+    score       REAL NOT NULL CHECK (score BETWEEN 1 AND 10),
     review      TEXT,
     created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
